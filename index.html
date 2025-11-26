@@ -4,12 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Face Tracker</title>
-   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-
   <style>
     body {
-      text-align: center;
       font-family: sans-serif;
+      text-align: center;
       background: #f0f0f0;
       margin: 0;
       padding: 0;
@@ -17,7 +15,6 @@
     }
     #video {
       border: 2px solid #333;
-      margin-top: 20px;
       max-width: 100%;
       height: auto;
     }
@@ -35,45 +32,53 @@
 <body>
   <h1>Face Tracker</h1>
   <div id="container">
-    <video id="video" autoplay muted playsinline></video>
-
+    <video id="video" width="720" height="560" autoplay muted playsinline></video>
   </div>
 
-  <script>
+  <script type="module">
+    // Import face-api.js as module
+    import * as faceapi from 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.esm.js';
+
     const video = document.getElementById('video');
+    const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
-    // Load models from CDN
-    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
-
-    Promise.all([
+    // Load face-api.js models from CDN
+    await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
       faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-    ]).then(startVideo).catch(err => console.error("Model loading error:", err));
+    ]);
 
     // Start camera
-    function startVideo() {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          video.srcObject = stream;
-        })
-        .catch(err => console.error("Camera access error:", err));
+    async function startVideo() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch (err) {
+        console.error("Camera access error:", err);
+      }
     }
 
+    startVideo();
+
+    // When video plays, create canvas and start detection loop
     video.addEventListener('play', () => {
+      const container = document.getElementById('container');
       const canvas = faceapi.createCanvasFromMedia(video);
-      document.getElementById('container').appendChild(canvas);
+      container.appendChild(canvas);
 
       const displaySize = { width: video.width, height: video.height };
       faceapi.matchDimensions(canvas, displaySize);
 
       setInterval(async () => {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-                                         .withFaceLandmarks();
-        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        const detections = await faceapi
+          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks();
+
+        const resized = faceapi.resizeResults(detections, displaySize);
         canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-        faceapi.draw.drawDetections(canvas, resizedDetections);
-        faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+        faceapi.draw.drawDetections(canvas, resized);
+        faceapi.draw.drawFaceLandmarks(canvas, resized);
       }, 100);
     });
   </script>
