@@ -37,6 +37,8 @@
 
       // Load Tiny Face Detector model from local models folder
       await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+
+
       info.innerText = "Models loaded.\nPoint your camera at your face.";
 
       // Open camera
