@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Face Tracker</title>
+  <title>Face Tracker with Geolocation</title>
   <style>
     body {
       font-family: sans-serif;
@@ -26,14 +26,22 @@
     #container {
       position: relative;
       display: inline-block;
+      margin: 0 auto; /* Center container horizontally */
+    }
+    #geo {
+      margin-top: 20px;
+      font-weight: bold;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
-  <h1>Face Tracker</h1>
+  <h1>Face Tracker with Geolocation</h1>
   <div id="container">
     <video id="video" autoplay muted playsinline></video>
   </div>
+
+  <div id="geo">Latitude: -- , Longitude: --</div>
 
   <!-- Browser-ready UMD version of face-api.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
@@ -42,9 +50,10 @@
     window.addEventListener('load', async () => {
       const video = document.getElementById('video');
       const container = document.getElementById('container');
+      const geoDisplay = document.getElementById('geo');
       const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
-      // Load models (including expression recognition)
+      // Load face-api.js models (including expression recognition)
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -60,58 +69,73 @@
         console.error("Camera access error:", err);
       }
 
-      // When video plays, create canvas and start detection
-    video.addEventListener('play', () => {
-  const canvas = faceapi.createCanvasFromMedia(video);
-  canvas.style.position = 'absolute';
-  canvas.style.top = '0';
-  canvas.style.left = '0';
-  container.appendChild(canvas);
+      // Start face detection when video plays
+      video.addEventListener('play', () => {
+        const canvas = faceapi.createCanvasFromMedia(video);
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        container.appendChild(canvas);
 
-  function getDisplaySize() {
-    return { width: video.clientWidth, height: video.clientHeight };
-  }
+        function getDisplaySize() {
+          return { width: video.clientWidth, height: video.clientHeight };
+        }
 
-  faceapi.matchDimensions(canvas, getDisplaySize());
+        faceapi.matchDimensions(canvas, getDisplaySize());
 
-  setInterval(async () => {
-    const displaySize = getDisplaySize();
-    faceapi.matchDimensions(canvas, displaySize);
+        setInterval(async () => {
+          const displaySize = getDisplaySize();
+          faceapi.matchDimensions(canvas, displaySize);
 
-    const detections = await faceapi
-      .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-      .withFaceLandmarks()
-      .withFaceExpressions();
+          const detections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceExpressions();
 
-    const resized = faceapi.resizeResults(detections, displaySize);
+          const resized = faceapi.resizeResults(detections, displaySize);
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawDetections(canvas, resized);
+          faceapi.draw.drawFaceLandmarks(canvas, resized);
 
-    faceapi.draw.drawDetections(canvas, resized);
-    faceapi.draw.drawFaceLandmarks(canvas, resized);
+          resized.forEach(result => {
+            const { expressions, detection } = result;
+            const maxValue = Math.max(...Object.values(expressions));
+            const emotion = Object.keys(expressions).filter(
+              item => expressions[item] === maxValue
+            )[0];
+            const { x, y } = detection.box;
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "red";
+            ctx.fillText(emotion, x, y - 10);
+          });
+        }, 100);
+      });
 
-    resized.forEach(result => {
-      const { expressions, detection } = result;
-      const maxValue = Math.max(...Object.values(expressions));
-      const emotion = Object.keys(expressions).filter(
-        item => expressions[item] === maxValue
-      )[0];
-      const { x, y } = detection.box;
-      ctx.font = "16px Arial";
-      ctx.fillStyle = "red";
-      ctx.fillText(emotion, x, y - 10);
-    });
-  }, 100);
-});
-
-      // Handle window resize for responsiveness
+      // Handle window resize for responsive canvas
       window.addEventListener('resize', () => {
         const canvas = container.querySelector('canvas');
         if (canvas) {
           faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
         }
       });
+
+      // Geolocation tracking
+      if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+          position => {
+            const { latitude, longitude } = position.coords;
+            geoDisplay.innerText = `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
+          },
+          err => {
+            geoDisplay.innerText = `Geolocation error: ${err.message}`;
+          },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        );
+      } else {
+        geoDisplay.innerText = "Geolocation not supported by this browser.";
+      }
     });
   </script>
 </body>
