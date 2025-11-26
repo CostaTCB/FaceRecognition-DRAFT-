@@ -35,8 +35,13 @@
     async function startFaceTracking() {
       const info = document.getElementById("info");
 
-      // Load Tiny Face Detector model from local models folder
-      await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+await faceapi.nets.tinyFaceDetector.loadFromUri(
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights"
+);
+await faceapi.nets.faceLandmark68Net.loadFromUri(
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights"
+);
+
 
 
       info.innerText = "Models loaded.\nPoint your camera at your face.";
