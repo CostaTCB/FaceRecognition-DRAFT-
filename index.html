@@ -35,51 +35,48 @@
     <video id="video" width="720" height="560" autoplay muted playsinline></video>
   </div>
 
-  <script type="module">
-    // Import face-api.js as module
-    import * as faceapi from 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.esm.js';
+  <!-- Browser-ready UMD version of face-api.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-    const video = document.getElementById('video');
-    const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+  <script>
+    // Wait until faceapi is loaded
+    window.addEventListener('load', async () => {
+      const video = document.getElementById('video');
+      const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
-    // Load face-api.js models from CDN
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-    ]);
+      // Load models
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
 
-    // Start camera
-    async function startVideo() {
+      // Start camera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
       } catch (err) {
         console.error("Camera access error:", err);
       }
-    }
 
-    startVideo();
+      video.addEventListener('play', () => {
+        const container = document.getElementById('container');
+        const canvas = faceapi.createCanvasFromMedia(video);
+        container.appendChild(canvas);
 
-    // When video plays, create canvas and start detection loop
-    video.addEventListener('play', () => {
-      const container = document.getElementById('container');
-      const canvas = faceapi.createCanvasFromMedia(video);
-      container.appendChild(canvas);
+        const displaySize = { width: video.width, height: video.height };
+        faceapi.matchDimensions(canvas, displaySize);
 
-      const displaySize = { width: video.width, height: video.height };
-      faceapi.matchDimensions(canvas, displaySize);
+        setInterval(async () => {
+          const detections = await faceapi.detectAllFaces(
+            video,
+            new faceapi.TinyFaceDetectorOptions()
+          ).withFaceLandmarks();
 
-      setInterval(async () => {
-        const detections = await faceapi
-          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks();
-
-        const resized = faceapi.resizeResults(detections, displaySize);
-        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-        faceapi.draw.drawDetections(canvas, resized);
-        faceapi.draw.drawFaceLandmarks(canvas, resized);
-      }, 100);
+          const resized = faceapi.resizeResults(detections, displaySize);
+          canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawDetections(canvas, resized);
+          faceapi.draw.drawFaceLandmarks(canvas, resized);
+        }, 100);
+      });
     });
   </script>
 </body>
