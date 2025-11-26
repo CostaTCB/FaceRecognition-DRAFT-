@@ -20,6 +20,7 @@
       background-color: rgba(0,0,0,0.4);
       padding: 5px;
       border-radius: 5px;
+      white-space: pre-line; /* show new lines in info box */
     }
   </style>
 </head>
@@ -34,9 +35,10 @@
     async function startFaceTracking() {
       const info = document.getElementById("info");
 
-      // Load face-api.js models
-      await faceapi.nets.tinyFaceDetector.loadFromUri("https://justadudewhohacks.github.io/face-api.js/models");
-      info.innerText = "Point your camera at your face";
+      // Load Tiny Face Detector model from CDN
+      await faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights");
+
+      info.innerText = "Models loaded.\nPoint your camera at your face.";
 
       // Open camera
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
