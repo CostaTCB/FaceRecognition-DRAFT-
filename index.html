@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Simple Face Tracker</title>
+  <title>Face Tracker with Geolocation</title>
   <script defer src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     video, canvas { 
@@ -10,40 +10,60 @@
       width: 100%; 
       height: auto; 
     }
-    h2 {
+    #info {
       position: absolute;
-      top:10px; left:10px;
-      color:white;
-      z-index:1000;
-      font-family:Arial;
+      top: 10px;
+      left: 10px;
+      color: white;
+      z-index: 1000;
+      font-family: Arial, sans-serif;
+      background-color: rgba(0,0,0,0.4);
+      padding: 5px;
+      border-radius: 5px;
     }
   </style>
 </head>
 
 <body>
-  <h2>Loading models…</h2>
+  <div id="info">Loading models…</div>
 
   <video id="video" autoplay muted playsinline></video>
   <canvas id="canvas"></canvas>
 
   <script>
     async function startFaceTracking() {
-      // Load models
+      const info = document.getElementById("info");
+
+      // Load face-api.js models
       await faceapi.nets.tinyFaceDetector.loadFromUri("https://justadudewhohacks.github.io/face-api.js/models");
+      info.innerText = "Point your camera at your face";
 
-      document.querySelector("h2").innerText = "Point your camera at your face";
-
-      // Open phone camera
+      // Open camera
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       const video = document.getElementById("video");
       video.srcObject = stream;
+
+      // Get geolocation
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const latitude = position.coords.latitude.toFixed(6);
+            const longitude = position.coords.longitude.toFixed(6);
+            info.innerText += `\nLatitude: ${latitude}\nLongitude: ${longitude}`;
+          },
+          (error) => {
+            info.innerText += `\nGeolocation Error: ${error.message}`;
+          }
+        );
+      } else {
+        info.innerText += "\nGeolocation not supported by your browser";
+      }
 
       video.onplaying = () => {
         const canvas = document.getElementById("canvas");
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
         canvas.width = displaySize.width;
         canvas.height = displaySize.height;
-
         faceapi.matchDimensions(canvas, displaySize);
 
         setInterval(async () => {
@@ -57,6 +77,5 @@
 
     startFaceTracking();
   </script>
-
 </body>
 </html>
