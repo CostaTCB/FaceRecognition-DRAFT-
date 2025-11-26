@@ -6,34 +6,62 @@
   <title>Face Tracker</title>
   <script defer src="https://unpkg.com/face-api.js"></script>
   <style>
-    body { text-align: center; font-family: sans-serif; background: #f0f0f0; }
-    video { border: 2px solid #333; margin-top: 20px; }
-    canvas { position: absolute; top: 0; left: 0; }
+    body {
+      text-align: center;
+      font-family: sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    #video {
+      border: 2px solid #333;
+      margin-top: 20px;
+      max-width: 100%;
+      height: auto;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #container {
+      position: relative;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
   <h1>Face Tracker</h1>
-  <video id="video" width="720" height="560" autoplay muted></video>
+  <div id="container">
+    <video id="video" width="720" height="560" autoplay muted playsinline></video>
+  </div>
 
   <script>
     const video = document.getElementById('video');
 
-    // Load models from the /models folder
-    Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-      faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-      faceapi.nets.faceRecognitionNet.loadFromUri('/models')
-    ]).then(startVideo);
+    // Load models from CDN
+    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
 
+    Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+    ]).then(startVideo).catch(err => console.error("Model loading error:", err));
+
+    // Start camera
     function startVideo() {
-      navigator.mediaDevices.getUserMedia({ video: {} })
-        .then(stream => video.srcObject = stream)
-        .catch(err => console.error("Camera error:", err));
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          video.srcObject = stream;
+        })
+        .catch(err => console.error("Camera access error:", err));
     }
 
     video.addEventListener('play', () => {
       const canvas = faceapi.createCanvasFromMedia(video);
-      document.body.append(canvas);
+      document.getElementById('container').appendChild(canvas);
+
       const displaySize = { width: video.width, height: video.height };
       faceapi.matchDimensions(canvas, displaySize);
 
