@@ -32,50 +32,86 @@
 <body>
   <h1>Face Tracker</h1>
   <div id="container">
-    <video id="video" width="720" height="560" autoplay muted playsinline></video>
+    <video id="video" autoplay muted playsinline></video>
   </div>
 
   <!-- Browser-ready UMD version of face-api.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
-    // Wait until faceapi is loaded
     window.addEventListener('load', async () => {
       const video = document.getElementById('video');
+      const container = document.getElementById('container');
       const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
-      // Load models
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      // Load models (including expression recognition)
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+      ]);
 
       // Start camera
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
         video.srcObject = stream;
       } catch (err) {
         console.error("Camera access error:", err);
       }
 
+      // When video plays, create canvas and start detection
       video.addEventListener('play', () => {
-        const container = document.getElementById('container');
         const canvas = faceapi.createCanvasFromMedia(video);
         container.appendChild(canvas);
 
-        const displaySize = { width: video.width, height: video.height };
-        faceapi.matchDimensions(canvas, displaySize);
+        // Function to get actual video size
+        function getDisplaySize() {
+          return { width: video.clientWidth, height: video.clientHeight };
+        }
 
+        faceapi.matchDimensions(canvas, getDisplaySize());
+
+        // Detection loop
         setInterval(async () => {
-          const detections = await faceapi.detectAllFaces(
-            video,
-            new faceapi.TinyFaceDetectorOptions()
-          ).withFaceLandmarks();
+          const displaySize = getDisplaySize();
+          faceapi.matchDimensions(canvas, displaySize);
+
+          const detections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceExpressions();
 
           const resized = faceapi.resizeResults(detections, displaySize);
-          canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
           faceapi.draw.drawDetections(canvas, resized);
           faceapi.draw.drawFaceLandmarks(canvas, resized);
+
+          // Draw expressions above the face
+          resized.forEach(result => {
+            const { expressions, detection } = result;
+            const maxValue = Math.max(...Object.values(expressions));
+            const emotion = Object.keys(expressions).filter(
+              item => expressions[item] === maxValue
+            )[0];
+
+            const { x, y } = detection.box;
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "red";
+            ctx.fillText(emotion, x, y - 10);
+          });
         }, 100);
+      });
+
+      // Handle window resize for responsiveness
+      window.addEventListener('resize', () => {
+        const canvas = container.querySelector('canvas');
+        if (canvas) {
+          faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
+        }
       });
     });
   </script>
