@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Face Tracker + Nearest Project</title>
+  <title>Face Tracker with Geolocation + Nearest Project</title>
   <style>
     body {
       font-family: sans-serif;
@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <h1>Face Tracker + Nearest Project</h1>
+  <h1>Face Tracker with Geolocation + Nearest Project</h1>
 
   <div id="container">
     <video id="video" autoplay muted playsinline></video>
@@ -49,56 +49,51 @@
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
-    const SHEET_JSON_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRcyC7XiFF8AGpV8-3iOM5nJYjGNdhyrIlZ1EfH8nII-y-SexyZWavzChQVv2fAnZSqxWPhaGyuO0gU/pub?output=csv";
-    
-    let projects = [];
+    // List of projects with lat/lng
+    const PROJECTS = [
+      { name: "TCB Office / Warehouse", lat: 1.3036, lng: 103.7890 },
+      { name: "Tengah C6 - Plantation Creek", lat: 1.4010, lng: 103.7420 },
+      { name: "Example Project 640991", lat: 1.3520, lng: 103.7030 }
+      // Add more projects here
+    ];
 
-    // Fetch projects from Google Sheet (CSV)
-    async function loadProjects() {
-      const res = await fetch(SHEET_JSON_URL);
-      const text = await res.text();
-      const rows = text.split("\n").map(r => r.trim()).filter(r => r);
-      projects = rows;
+    // Calculate distance in km between two coordinates
+    function distanceInKm(lat1, lon1, lat2, lon2) {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
     }
 
-    function extractPincode(projectName) {
-      const match = projectName.match(/\((\d{6})\)/);
-      return match ? match[1] : null;
-    }
-
-    function getNearestProject(userPincode) {
+    // Find nearest project within 10 km
+    function getNearestProject(userLat, userLng) {
       let nearest = null;
-      let minDiff = Infinity;
-      projects.forEach(name => {
-        const pincode = extractPincode(name);
-        if(pincode){
-          const diff = Math.abs(Number(userPincode) - Number(pincode));
-          if(diff < minDiff){
-            minDiff = diff;
-            nearest = { name, diff };
-          }
+      let minDist = Infinity;
+
+      PROJECTS.forEach(project => {
+        const dist = distanceInKm(userLat, userLng, project.lat, project.lng);
+        if(dist < minDist){
+          minDist = dist;
+          nearest = { ...project, distance: dist };
         }
       });
-      return nearest;
+
+      if(nearest && nearest.distance <= 10){
+        return nearest;
+      }
+      return null;
     }
 
-    function getPincodeFromCoords(lat, lon){
+    // Reverse geocode to get postal code
+    function getPincodeFromCoords(lat, lon) {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
       fetch(url, { headers: { "User-Agent": "FaceTrackerApp/1.0" } })
         .then(res => res.json())
         .then(data => {
           const pincode = data?.address?.postcode || "Not Found";
           document.getElementById("pincode").innerText = "Pincode: " + pincode;
-
-          // Find nearest project
-          if(projects.length && pincode !== "Not Found"){
-            const nearest = getNearestProject(pincode);
-            if(nearest){
-              document.getElementById("project").innerText = `Project Name: ${nearest.name} (Postal diff: ${nearest.diff})`;
-            } else {
-              document.getElementById("project").innerText = "Project Name: --";
-            }
-          }
         })
         .catch(err => {
           console.error("Reverse geocoding error:", err);
@@ -110,12 +105,10 @@
       const video = document.getElementById('video');
       const container = document.getElementById('container');
       const geoDisplay = document.getElementById('geo');
-
-      // Load projects first
-      await loadProjects();
-
-      // Load face-api models
+      const projectDisplay = document.getElementById('project');
       const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+
+      // Load face-api.js models
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -124,11 +117,11 @@
       ]);
 
       // Start camera
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({ video:{} });
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
         video.srcObject = stream;
-      } catch(err){
-        console.error("Camera error:", err);
+      } catch (err) {
+        console.error("Camera access error:", err);
       }
 
       // Face detection
@@ -145,44 +138,59 @@
 
         faceapi.matchDimensions(canvas, getDisplaySize());
 
-        setInterval(async ()=>{
+        setInterval(async () => {
           const displaySize = getDisplaySize();
           faceapi.matchDimensions(canvas, displaySize);
+
           const detections = await faceapi
             .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
             .withFaceLandmarks()
             .withFaceExpressions();
+
           const resized = faceapi.resizeResults(detections, displaySize);
           const ctx = canvas.getContext('2d');
-          ctx.clearRect(0,0,canvas.width,canvas.height);
-          faceapi.draw.drawDetections(canvas,resized);
-          faceapi.draw.drawFaceLandmarks(canvas,resized);
-          resized.forEach(result=>{
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          faceapi.draw.drawDetections(canvas, resized);
+          faceapi.draw.drawFaceLandmarks(canvas, resized);
+
+          resized.forEach(result => {
             const { expressions, detection } = result;
             const maxValue = Math.max(...Object.values(expressions));
-            const emotion = Object.keys(expressions).filter(item=>expressions[item]===maxValue)[0];
+            const emotion = Object.keys(expressions).filter(
+              item => expressions[item] === maxValue
+            )[0];
             const { x, y } = detection.box;
             ctx.font = "16px Arial";
             ctx.fillStyle = "red";
-            ctx.fillText(emotion, x, y-50);
+            ctx.fillText(emotion, x, y - 10);
           });
         }, 100);
       });
 
-      window.addEventListener('resize', ()=>{
+      window.addEventListener('resize', () => {
         const canvas = container.querySelector('canvas');
-        if(canvas) faceapi.matchDimensions(canvas,{ width: video.clientWidth, height: video.clientHeight });
+        if(canvas) faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
       });
 
-      // Geolocation
+      // Geolocation + nearest project
       if("geolocation" in navigator){
-        navigator.geolocation.watchPosition(pos=>{
-          const { latitude, longitude } = pos.coords;
+        navigator.geolocation.watchPosition(async position=>{
+          const { latitude, longitude } = position.coords;
           geoDisplay.innerText = `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
           getPincodeFromCoords(latitude, longitude);
-        }, err=>{
+
+          const nearestProject = getNearestProject(latitude, longitude);
+          if(nearestProject){
+            projectDisplay.innerText = `Project Name: ${nearestProject.name} (Distance: ${nearestProject.distance.toFixed(2)} km)`;
+          } else {
+            projectDisplay.innerText = "Project Name: -- (No project within 10 km)";
+          }
+        },
+        err=>{
           geoDisplay.innerText = `Geolocation error: ${err.message}`;
-        }, { enableHighAccuracy:true, maximumAge:10000, timeout:5000 });
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
       } else {
         geoDisplay.innerText = "Geolocation not supported.";
       }
