@@ -49,28 +49,19 @@
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
-    const OFFICE_PINCODE = "628790";
-
-    // Small mapping of Singapore pincodes → lat/lng (for demo, can expand if needed)
     const SG_POSTAL_COORDS = {
       "628790": { lat: 1.3036, lng: 103.7890 },
-      "538856": { lat: 1.369, lng: 103.875 },
-      "545681": { lat: 1.377, lng: 103.877 },
-      "397724": { lat: 1.312, lng: 103.876 },
-      "397804": { lat: 1.315, lng: 103.871 },
-      "397631": { lat: 1.310, lng: 103.870 },
-      "148949": { lat: 1.292, lng: 103.796 },
-      "544964": { lat: 1.384, lng: 103.888 },
-      "628790": { lat: 1.3036, lng: 103.7890 },
-      "079717": { lat: 1.282, lng: 103.845 },
-      "809687": { lat: 1.438, lng: 103.789 }
-      // Add more as needed
+      "691134": { lat: 1.4010, lng: 103.7420 }
+    };
+
+    const PINCODE_PROJECT_NAME = {
+      "628790": "TCB Office / Warehouse",
+      "691134": "Tengah C6 - Plantation Creek"
     };
 
     // Reverse geocode for pincode
     function getPincodeFromCoords(lat, lon) {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
-
       fetch(url, { headers: { "User-Agent": "FaceTrackerApp/1.0" } })
         .then(res => res.json())
         .then(data => {
@@ -93,39 +84,24 @@
       return R * c;
     }
 
-    // Parse pincode from string e.g., "TCB Store (628790)"
-    function extractPincode(str) {
-      const match = str.match(/\((\d{6})\)/);
-      return match ? match[1] : null;
-    }
-
-    // Fetch CSV from Google Sheets
-    async function fetchProjects() {
-      const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRcyC7XiFF8AGpV8-3iOM5nJYjGNdhyrIlZ1EfH8nII-y-SexyZWavzChQVv2fAnZSqxWPhaGyuO0gU/pub?output=csv";
-      const res = await fetch(url);
-      const text = await res.text();
-      const rows = text.split("\n").map(r => r.trim()).filter(r => r.length>0);
-      const projects = rows.map(row => ({
-        name: row,
-        pincode: extractPincode(row)
-      })).filter(p => p.pincode && SG_POSTAL_COORDS[p.pincode]);
-      return projects;
-    }
-
     async function getNearestProject(userLat, userLng) {
-      const projects = await fetchProjects();
-      let nearest = null;
+      let nearestPincode = null;
       let minDist = Infinity;
-      projects.forEach(proj => {
-        const coord = SG_POSTAL_COORDS[proj.pincode];
+
+      for (let pin in SG_POSTAL_COORDS) {
+        const coord = SG_POSTAL_COORDS[pin];
         const dist = distanceInKm(userLat, userLng, coord.lat, coord.lng);
-        if(dist < minDist) {
+        if (dist < minDist) {
           minDist = dist;
-          nearest = proj;
+          nearestPincode = pin;
         }
-      });
-      if(minDist <= 1) return nearest.name;
-      else return null;
+      }
+
+      if(minDist <= 1 && nearestPincode) {
+        return PINCODE_PROJECT_NAME[nearestPincode];
+      } else {
+        return null;
+      }
     }
 
     window.addEventListener('load', async () => {
@@ -200,7 +176,7 @@
         if(canvas) faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
       });
 
-      // Geolocation + project lookup
+      // Geolocation + nearest project
       if("geolocation" in navigator){
         navigator.geolocation.watchPosition(async position=>{
           const { latitude, longitude } = position.coords;
