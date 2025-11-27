@@ -53,8 +53,8 @@
     const PROJECTS = [
       { name: "TCB Office / Warehouse", lat: 1.3036, lng: 103.7890 },
       { name: "Tengah C6 - Plantation Creek", lat: 1.4010, lng: 103.7420 },
-      // Add more projects here
       { name: "Example Project 640991", lat: 1.3520, lng: 103.7030 }
+      // Add more projects here
     ];
 
     // Calculate distance in km between two coordinates
@@ -67,7 +67,7 @@
       return R * c;
     }
 
-    // Find nearest project based on user location
+    // Find nearest project within 10 km
     function getNearestProject(userLat, userLng) {
       let nearest = null;
       let minDist = Infinity;
@@ -76,11 +76,14 @@
         const dist = distanceInKm(userLat, userLng, project.lat, project.lng);
         if(dist < minDist){
           minDist = dist;
-          nearest = project;
+          nearest = { ...project, distance: dist };
         }
       });
 
-      return nearest;
+      if(nearest && nearest.distance <= 10){
+        return nearest;
+      }
+      return null;
     }
 
     // Reverse geocode to get postal code
@@ -178,7 +181,11 @@
           getPincodeFromCoords(latitude, longitude);
 
           const nearestProject = getNearestProject(latitude, longitude);
-          projectDisplay.innerText = nearestProject ? `Project Name: ${nearestProject.name}` : "Project Name: --";
+          if(nearestProject){
+            projectDisplay.innerText = `Project Name: ${nearestProject.name} (Distance: ${nearestProject.distance.toFixed(2)} km)`;
+          } else {
+            projectDisplay.innerText = "Project Name: -- (No project within 10 km)";
+          }
         },
         err=>{
           geoDisplay.innerText = `Geolocation error: ${err.message}`;
