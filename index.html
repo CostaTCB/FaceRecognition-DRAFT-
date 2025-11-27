@@ -28,32 +28,55 @@
       display: inline-block;
       margin: 0 auto; /* Center container horizontally */
     }
-    #geo {
-      margin-top: 20px;
+    #geo, #pincode {
+      margin-top: 10px;
       font-weight: bold;
       font-size: 16px;
     }
   </style>
 </head>
 <body>
-  <h1>Face Tracker with Geolocation</h1>
+  <h1>Face Tracker with Geolocation + Pincode</h1>
+
   <div id="container">
     <video id="video" autoplay muted playsinline></video>
   </div>
 
   <div id="geo">Latitude: -- , Longitude: --</div>
+  <div id="pincode">Pincode: --</div>
 
   <!-- Browser-ready UMD version of face-api.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
+    // 🔹 FUNCTION: Reverse geocode to get PINCODE
+    function getPincodeFromCoords(lat, lon) {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
+
+      fetch(url, {
+        headers: {
+          "User-Agent": "FaceTrackerApp/1.0"
+        }
+      })
+        .then(res => res.json())
+        .then(data => {
+          const pincode = data?.address?.postcode || "Not Found";
+          document.getElementById("pincode").innerText = "Pincode: " + pincode;
+        })
+        .catch(err => {
+          console.error("Reverse geocoding error:", err);
+          document.getElementById("pincode").innerText = "Pincode: Error";
+        });
+    }
+
+
     window.addEventListener('load', async () => {
       const video = document.getElementById('video');
       const container = document.getElementById('container');
       const geoDisplay = document.getElementById('geo');
       const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
-      // Load face-api.js models (including expression recognition)
+      // Load face-api.js models
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -69,7 +92,7 @@
         console.error("Camera access error:", err);
       }
 
-      // Start face detection when video plays
+      // FACE DETECTION
       video.addEventListener('play', () => {
         const canvas = faceapi.createCanvasFromMedia(video);
         canvas.style.position = 'absolute';
@@ -113,7 +136,7 @@
         }, 100);
       });
 
-      // Handle window resize for responsive canvas
+      // Resize handler
       window.addEventListener('resize', () => {
         const canvas = container.querySelector('canvas');
         if (canvas) {
@@ -121,12 +144,17 @@
         }
       });
 
-      // Geolocation tracking
+      // GEOLOCATION + PINCODE
       if ("geolocation" in navigator) {
         navigator.geolocation.watchPosition(
           position => {
             const { latitude, longitude } = position.coords;
-            geoDisplay.innerText = `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
+
+            geoDisplay.innerText =
+              `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
+
+            // 🔹 Call function to fetch postal code
+            getPincodeFromCoords(latitude, longitude);
           },
           err => {
             geoDisplay.innerText = `Geolocation error: ${err.message}`;
@@ -134,7 +162,7 @@
           { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
         );
       } else {
-        geoDisplay.innerText = "Geolocation not supported by this browser.";
+        geoDisplay.innerText = "Geolocation not supported.";
       }
     });
   </script>
