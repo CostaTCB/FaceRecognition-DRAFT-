@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Face Tracker with Geolocation</title>
+  <title>Face Tracker with Geolocation + Project Lookup</title>
   <style>
     body {
       font-family: sans-serif;
@@ -26,9 +26,9 @@
     #container {
       position: relative;
       display: inline-block;
-      margin: 0 auto; /* Center container horizontally */
+      margin: 0 auto;
     }
-    #geo, #pincode {
+    #geo, #pincode, #project {
       margin-top: 10px;
       font-weight: bold;
       font-size: 16px;
@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <h1>Face Tracker with Geolocation + Pincode</h1>
+  <h1>Face Tracker with Geolocation + Project Lookup</h1>
 
   <div id="container">
     <video id="video" autoplay muted playsinline></video>
@@ -44,20 +44,34 @@
 
   <div id="geo">Latitude: -- , Longitude: --</div>
   <div id="pincode">Pincode: --</div>
+  <div id="project">Project Name: --</div>
 
-  <!-- Browser-ready UMD version of face-api.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
-    // 🔹 FUNCTION: Reverse geocode to get PINCODE
+    const OFFICE_PINCODE = "628790";
+
+    // Small mapping of Singapore pincodes → lat/lng (for demo, can expand if needed)
+    const SG_POSTAL_COORDS = {
+      "628790": { lat: 1.3036, lng: 103.7890 },
+      "538856": { lat: 1.369, lng: 103.875 },
+      "545681": { lat: 1.377, lng: 103.877 },
+      "397724": { lat: 1.312, lng: 103.876 },
+      "397804": { lat: 1.315, lng: 103.871 },
+      "397631": { lat: 1.310, lng: 103.870 },
+      "148949": { lat: 1.292, lng: 103.796 },
+      "544964": { lat: 1.384, lng: 103.888 },
+      "628790": { lat: 1.3036, lng: 103.7890 },
+      "079717": { lat: 1.282, lng: 103.845 },
+      "809687": { lat: 1.438, lng: 103.789 }
+      // Add more as needed
+    };
+
+    // Reverse geocode for pincode
     function getPincodeFromCoords(lat, lon) {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
 
-      fetch(url, {
-        headers: {
-          "User-Agent": "FaceTrackerApp/1.0"
-        }
-      })
+      fetch(url, { headers: { "User-Agent": "FaceTrackerApp/1.0" } })
         .then(res => res.json())
         .then(data => {
           const pincode = data?.address?.postcode || "Not Found";
@@ -69,11 +83,56 @@
         });
     }
 
+    // Calculate distance between two lat/lng points in km
+    function distanceInKm(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth radius km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    // Parse pincode from string e.g., "TCB Store (628790)"
+    function extractPincode(str) {
+      const match = str.match(/\((\d{6})\)/);
+      return match ? match[1] : null;
+    }
+
+    // Fetch CSV from Google Sheets
+    async function fetchProjects() {
+      const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRcyC7XiFF8AGpV8-3iOM5nJYjGNdhyrIlZ1EfH8nII-y-SexyZWavzChQVv2fAnZSqxWPhaGyuO0gU/pub?output=csv";
+      const res = await fetch(url);
+      const text = await res.text();
+      const rows = text.split("\n").map(r => r.trim()).filter(r => r.length>0);
+      const projects = rows.map(row => ({
+        name: row,
+        pincode: extractPincode(row)
+      })).filter(p => p.pincode && SG_POSTAL_COORDS[p.pincode]);
+      return projects;
+    }
+
+    async function getNearestProject(userLat, userLng) {
+      const projects = await fetchProjects();
+      let nearest = null;
+      let minDist = Infinity;
+      projects.forEach(proj => {
+        const coord = SG_POSTAL_COORDS[proj.pincode];
+        const dist = distanceInKm(userLat, userLng, coord.lat, coord.lng);
+        if(dist < minDist) {
+          minDist = dist;
+          nearest = proj;
+        }
+      });
+      if(minDist <= 1) return nearest.name;
+      else return null;
+    }
 
     window.addEventListener('load', async () => {
       const video = document.getElementById('video');
       const container = document.getElementById('container');
       const geoDisplay = document.getElementById('geo');
+      const projectDisplay = document.getElementById('project');
       const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
       // Load face-api.js models
@@ -92,7 +151,7 @@
         console.error("Camera access error:", err);
       }
 
-      // FACE DETECTION
+      // Face detection
       video.addEventListener('play', () => {
         const canvas = faceapi.createCanvasFromMedia(video);
         canvas.style.position = 'absolute';
@@ -136,34 +195,29 @@
         }, 100);
       });
 
-      // Resize handler
       window.addEventListener('resize', () => {
         const canvas = container.querySelector('canvas');
-        if (canvas) {
-          faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
-        }
+        if(canvas) faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
       });
 
-      // GEOLOCATION + PINCODE
-      if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(
-          position => {
-            const { latitude, longitude } = position.coords;
+      // Geolocation + project lookup
+      if("geolocation" in navigator){
+        navigator.geolocation.watchPosition(async position=>{
+          const { latitude, longitude } = position.coords;
+          geoDisplay.innerText = `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
+          getPincodeFromCoords(latitude, longitude);
 
-            geoDisplay.innerText =
-              `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
-
-            // 🔹 Call function to fetch postal code
-            getPincodeFromCoords(latitude, longitude);
-          },
-          err => {
-            geoDisplay.innerText = `Geolocation error: ${err.message}`;
-          },
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-        );
+          const nearestProject = await getNearestProject(latitude, longitude);
+          projectDisplay.innerText = nearestProject ? `Project Name: ${nearestProject}` : "Project Name: --";
+        },
+        err=>{
+          geoDisplay.innerText = `Geolocation error: ${err.message}`;
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
       } else {
         geoDisplay.innerText = "Geolocation not supported.";
       }
+
     });
   </script>
 </body>
