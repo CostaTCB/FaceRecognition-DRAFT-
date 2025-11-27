@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Face Tracker with Geolocation + Project Lookup</title>
+  <title>Face Tracker with Geolocation + Nearest Project</title>
   <style>
     body {
       font-family: sans-serif;
@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <h1>Face Tracker with Geolocation + Project Lookup</h1>
+  <h1>Face Tracker with Geolocation + Nearest Project</h1>
 
   <div id="container">
     <video id="video" autoplay muted playsinline></video>
@@ -49,17 +49,41 @@
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
-    const SG_POSTAL_COORDS = {
-      "628790": { lat: 1.3036, lng: 103.7890 },
-      "691134": { lat: 1.4010, lng: 103.7420 }
-    };
+    // List of projects with lat/lng
+    const PROJECTS = [
+      { name: "TCB Office / Warehouse", lat: 1.3036, lng: 103.7890 },
+      { name: "Tengah C6 - Plantation Creek", lat: 1.4010, lng: 103.7420 },
+      // Add more projects here
+      { name: "Example Project 640991", lat: 1.3520, lng: 103.7030 }
+    ];
 
-    const PINCODE_PROJECT_NAME = {
-      "628790": "TCB Office / Warehouse",
-      "691134": "Tengah C6 - Plantation Creek"
-    };
+    // Calculate distance in km between two coordinates
+    function distanceInKm(lat1, lon1, lat2, lon2) {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
 
-    // Reverse geocode for pincode
+    // Find nearest project based on user location
+    function getNearestProject(userLat, userLng) {
+      let nearest = null;
+      let minDist = Infinity;
+
+      PROJECTS.forEach(project => {
+        const dist = distanceInKm(userLat, userLng, project.lat, project.lng);
+        if(dist < minDist){
+          minDist = dist;
+          nearest = project;
+        }
+      });
+
+      return nearest;
+    }
+
+    // Reverse geocode to get postal code
     function getPincodeFromCoords(lat, lon) {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
       fetch(url, { headers: { "User-Agent": "FaceTrackerApp/1.0" } })
@@ -72,36 +96,6 @@
           console.error("Reverse geocoding error:", err);
           document.getElementById("pincode").innerText = "Pincode: Error";
         });
-    }
-
-    // Calculate distance between two lat/lng points in km
-    function distanceInKm(lat1, lon1, lat2, lon2) {
-      const R = 6371; // Earth radius km
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    }
-
-    async function getNearestProject(userLat, userLng) {
-      let nearestPincode = null;
-      let minDist = Infinity;
-
-      for (let pin in SG_POSTAL_COORDS) {
-        const coord = SG_POSTAL_COORDS[pin];
-        const dist = distanceInKm(userLat, userLng, coord.lat, coord.lng);
-        if (dist < minDist) {
-          minDist = dist;
-          nearestPincode = pin;
-        }
-      }
-
-      if(minDist <= 1 && nearestPincode) {
-        return PINCODE_PROJECT_NAME[nearestPincode];
-      } else {
-        return null;
-      }
     }
 
     window.addEventListener('load', async () => {
@@ -183,8 +177,8 @@
           geoDisplay.innerText = `Latitude: ${latitude.toFixed(6)} , Longitude: ${longitude.toFixed(6)}`;
           getPincodeFromCoords(latitude, longitude);
 
-          const nearestProject = await getNearestProject(latitude, longitude);
-          projectDisplay.innerText = nearestProject ? `Project Name: ${nearestProject}` : "Project Name: --";
+          const nearestProject = getNearestProject(latitude, longitude);
+          projectDisplay.innerText = nearestProject ? `Project Name: ${nearestProject.name}` : "Project Name: --";
         },
         err=>{
           geoDisplay.innerText = `Geolocation error: ${err.message}`;
